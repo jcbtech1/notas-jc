@@ -14,7 +14,9 @@ export default function LoginPage() {
 
   const handleLogin = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (username === "test" && password === "password") {
+    const validUser = process.env.NEXT_PUBLIC_AUTH_USER || "test";
+    const validPass = process.env.NEXT_PUBLIC_AUTH_PASS || "password";
+    if (username === validUser && password === validPass) {
       localStorage.setItem("isLoggedIn", "true");
       router.push("/");
     } else {
