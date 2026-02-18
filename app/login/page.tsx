@@ -11,16 +11,29 @@ export default function LoginPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const handleLogin = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    const validUser = process.env.NEXT_PUBLIC_AUTH_USER || "test";
-    const validPass = process.env.NEXT_PUBLIC_AUTH_PASS || "password";
-    if (username === validUser && password === validPass) {
-      localStorage.setItem("isLoggedIn", "true");
-      router.push("/");
-    } else {
-      setError("ACCESO_DENEGADO: Credenciales inválidas");
+    setError("");
+    setLoading(true);
+    try {
+      const res = await fetch("/api/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        localStorage.setItem("isLoggedIn", "true");
+        router.push("/");
+      } else {
+        setError(data.error || "ACCESO_DENEGADO");
+      }
+    } catch {
+      setError("ERROR_CONEXION: No se pudo contactar al servidor");
+    } finally {
+      setLoading(false);
     }
   };
 
