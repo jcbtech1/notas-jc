@@ -25,7 +25,7 @@ export default function LoginPage() {
       });
       const data = await res.json();
       if (data.ok) {
-        localStorage.setItem("isLoggedIn", "true");
+        // Token guardado en cookie httpOnly automáticamente
         router.push("/");
       } else {
         setError(data.error || "ACCESO_DENEGADO");
@@ -93,13 +93,14 @@ export default function LoginPage() {
 
           <button
             type="submit"
-            className="w-full py-2.5 rounded font-bold text-sm uppercase tracking-wider transition-all"
+            disabled={loading}
+            className="w-full py-2.5 rounded font-bold text-sm uppercase tracking-wider transition-all disabled:opacity-50"
             style={{
               backgroundColor: colors.accent,
               color: theme === "AEGIS_DARK" ? "#000" : "#fff",
             }}
           >
-            AUTHENTICATE
+            {loading ? "PROCESANDO..." : "AUTHENTICATE"}
           </button>
         </form>
       </div>

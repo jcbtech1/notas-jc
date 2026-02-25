@@ -4,7 +4,7 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, Pencil, Eye, Save, AlertTriangle } from "lucide-react";
 import { useTheme } from "@/lib/ThemeContext";
-import { obtenerTema, actualizarTema, sincronizarNube, type Tema } from "@/lib/storage";
+import { type Tema } from "@/lib/storage";
 import ThemeSelector from "@/components/ThemeSelector";
 import TiptapEditor from "@/components/editor/TiptapEditor";
 
@@ -30,34 +30,48 @@ export default function TemaDetalle() {
 
   // ── Load tema + recover draft ──
   useEffect(() => {
-    if (localStorage.getItem("isLoggedIn") !== "true") {
-      router.push("/login");
-      return;
-    }
-    const t = obtenerTema(id);
-    if (!t) {
-      router.push("/");
-      return;
-    }
+    const cargarTema_async = async () => {
+      try {
+        const res = await fetch(`/api/tema/${id}`);
+        if (res.status === 401) {
+          router.push("/login");
+          return;
+        }
+        if (res.status === 404) {
+          router.push("/");
+          return;
+        }
+        const data = await res.json();
+        const t = data.tema as Tema;
 
-    // Check for emergency draft
-    const draft = localStorage.getItem(DRAFT_PREFIX + id);
-    if (draft && draft !== t.contenido) {
-      setContenido(draft);
-      setGuardado(false);
-      guardadoRef.current = false;
-    } else {
-      setContenido(t.contenido);
-    }
-    setTema(t);
+        // Check for emergency draft
+        const draft = localStorage.getItem(DRAFT_PREFIX + id);
+        if (draft && draft !== t.contenido) {
+          setContenido(draft);
+          setGuardado(false);
+          guardadoRef.current = false;
+        } else {
+          setContenido(t.contenido);
+        }
+        setTema(t);
+      } catch {
+        router.push("/");
+      }
+    };
+    cargarTema_async();
   }, [id, router]);
 
   // ── Auto-save emergency draft every 5s ──
   useEffect(() => {
     const interval = setInterval(() => {
-      if (!guardadoRef.current) {
+      if (!guardadoRef.current && tema) {
         localStorage.setItem(DRAFT_PREFIX + id, contenidoRef.current);
-        actualizarTema(id, { contenido: contenidoRef.current });
+        // Guardar en servidor
+        fetch(`/api/tema/${id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ contenido: contenidoRef.current }),
+        }).catch(() => {});
         setTema((prev) =>
           prev ? { ...prev, contenido: contenidoRef.current, actualizadoEn: Date.now() } : prev
         );
@@ -67,7 +81,7 @@ export default function TemaDetalle() {
     }, AUTO_SAVE_INTERVAL);
 
     return () => clearInterval(interval);
-  }, [id]);
+  }, [id, tema]);
 
   // ── Warn on page close if unsaved ──
   useEffect(() => {
@@ -97,8 +111,12 @@ export default function TemaDetalle() {
     router.push("/");
   };
 
-  const handleForceSaveAndLeave = () => {
-    actualizarTema(id, { contenido: contenidoRef.current });
+  const handleForceSaveAndLeave = async () => {
+    await fetch(`/api/tema/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ contenido: contenidoRef.current }),
+    });
     localStorage.removeItem(DRAFT_PREFIX + id);
     router.push("/");
   };
@@ -107,13 +125,22 @@ export default function TemaDetalle() {
     setSyncing(true);
     setSyncMsg("");
     try {
-      actualizarTema(id, { contenido: contenidoRef.current });
+      // Guardar contenido primero
+      await fetch(`/api/tema/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contenido: contenidoRef.current }),
+      });
       localStorage.removeItem(DRAFT_PREFIX + id);
       setGuardado(true);
       guardadoRef.current = true;
 
-      const resultado = await sincronizarNube(id);
-      setSyncMsg(resultado ? "SYNC_OK: Datos encriptados y listos" : "SYNC_FAIL");
+      // Sincronizar con encriptación
+      const res = await fetch(`/api/tema/${id}`, {
+        method: "POST",
+      });
+      const data = await res.json();
+      setSyncMsg(data.ok ? "SYNC_OK: Datos encriptados y listos" : "SYNC_FAIL");
     } catch {
       setSyncMsg("ERROR: Fallo en sincronización");
     } finally {

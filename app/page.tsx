@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTheme } from "@/lib/ThemeContext";
-import { cargarTemas, guardarTemas, crearTema, eliminarTema, type Tema } from "@/lib/storage";
+import { type Tema } from "@/lib/storage";
 import Header from "@/components/Header";
 import TemaCard from "@/components/TemaCard";
 import EmptyState from "@/components/EmptyState";
@@ -14,27 +14,57 @@ export default function Home() {
   const { colors } = useTheme();
 
   const [temas, setTemas] = useState<Tema[]>([]);
+  const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
 
+  // Cargar temas del servidor
   useEffect(() => {
-    if (localStorage.getItem("isLoggedIn") !== "true") {
-      router.push("/login");
-      return;
-    }
-    setTemas(cargarTemas());
+    const cargarTemas_async = async () => {
+      try {
+        const res = await fetch("/api/temas");
+        if (res.status === 401) {
+          router.push("/login");
+          return;
+        }
+        const data = await res.json();
+        setTemas(data.temas || []);
+      } catch {
+        console.error("Error cargando temas");
+      } finally {
+        setLoading(false);
+      }
+    };
+    cargarTemas_async();
   }, [router]);
 
-  const handleCrear = (titulo: string, descripcion: string) => {
-    const nuevo = crearTema(titulo, descripcion);
-    const actualizado = [...temas, nuevo];
-    guardarTemas(actualizado);
-    setTemas(actualizado);
-    setModalOpen(false);
+  const handleCrear = async (titulo: string, descripcion: string) => {
+    try {
+      const res = await fetch("/api/temas/crear-eliminar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ titulo, descripcion }),
+      });
+      const data = await res.json();
+      if (data.tema) {
+        setTemas([data.tema, ...temas]);
+        setModalOpen(false);
+      }
+    } catch {
+      console.error("Error creando tema");
+    }
   };
 
-  const handleEliminar = (id: string) => {
-    eliminarTema(id);
-    setTemas(cargarTemas());
+  const handleEliminar = async (id: string) => {
+    try {
+      await fetch("/api/temas/crear-eliminar", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+      setTemas(temas.filter((t) => t.id !== id));
+    } catch {
+      console.error("Error eliminando tema");
+    }
   };
 
   return (

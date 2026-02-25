@@ -19,8 +19,8 @@ export default function UserMenu() {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  const handleLogout = () => {
-    localStorage.removeItem("isLoggedIn");
+  const handleLogout = async () => {
+    await fetch("/api/logout", { method: "POST" });
     router.push("/login");
   };
 

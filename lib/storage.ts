@@ -1,11 +1,12 @@
 // Tipos y helpers de persistencia para AEGIS_OS
-// Local-first + Supabase sync con encriptación AES
+// Supabase + encriptación AES + multi-usuario
 
 import CryptoJS from "crypto-js";
-import { supabase } from "./supabase";
+import { supabaseAdmin } from "./supabase-admin";
 
 export interface Tema {
   id: string;
+  user_id: string;
   titulo: string;
   descripcion: string;
   contenido: string;
@@ -14,7 +15,6 @@ export interface Tema {
   actualizadoEn: number;
 }
 
-const STORAGE_KEY = "aegis_temas";
 const ENCRYPTION_KEY =
   process.env.NEXT_PUBLIC_ENCRYPTION_KEY || "AEGIS_NEURAL_CORE_2025";
 
@@ -28,10 +28,129 @@ export function desencriptarNota(cifrado: string): string {
   return bytes.toString(CryptoJS.enc.Utf8);
 }
 
-// ── Sincronización real con Supabase ──
-export async function sincronizarNube(id: string): Promise<boolean> {
+// ── CRUD en Supabase (multi-usuario) ──
+
+export async function cargarTemas(userId: string): Promise<Tema[]> {
   try {
-    const tema = obtenerTema(id);
+    const { data, error } = await supabaseAdmin
+      .from("notas")
+      .select("*")
+      .eq("user_id", userId)
+      .order("actualizadoEn", { ascending: false });
+
+    if (error) {
+      console.error("CARGAR_TEMAS_ERROR:", error);
+      return [];
+    }
+    return data || [];
+  } catch {
+    return [];
+  }
+}
+
+export async function obtenerTema(
+  userId: string,
+  id: string
+): Promise<Tema | null> {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from("notas")
+      .select("*")
+      .eq("id", id)
+      .eq("user_id", userId)
+      .single();
+
+    if (error) return null;
+    return data;
+  } catch {
+    return null;
+  }
+}
+
+export async function crearTema(
+  userId: string,
+  titulo: string,
+  descripcion: string
+): Promise<Tema | null> {
+  try {
+    const ahora = Date.now();
+    const { data, error } = await supabaseAdmin
+      .from("notas")
+      .insert([
+        {
+          id: crypto.randomUUID(),
+          user_id: userId,
+          titulo,
+          descripcion,
+          contenido: "",
+          color: "cyan",
+          creadoEn: ahora,
+          actualizadoEn: ahora,
+        },
+      ])
+      .select()
+      .single();
+
+    if (error) {
+      console.error("CREAR_TEMA_ERROR:", error);
+      return null;
+    }
+    return data;
+  } catch {
+    return null;
+  }
+}
+
+export async function actualizarTema(
+  userId: string,
+  id: string,
+  cambios: Partial<Tema>
+): Promise<boolean> {
+  try {
+    const { error } = await supabaseAdmin
+      .from("notas")
+      .update({ ...cambios, actualizadoEn: Date.now() })
+      .eq("id", id)
+      .eq("user_id", userId);
+
+    if (error) {
+      console.error("ACTUALIZAR_TEMA_ERROR:", error);
+      return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function eliminarTema(
+  userId: string,
+  id: string
+): Promise<boolean> {
+  try {
+    const { error } = await supabaseAdmin
+      .from("notas")
+      .delete()
+      .eq("id", id)
+      .eq("user_id", userId);
+
+    if (error) {
+      console.error("ELIMINAR_TEMA_ERROR:", error);
+      return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// ── Sincronización + Encriptación ──
+export async function sincronizarNube(
+  userId: string,
+  id: string
+): Promise<boolean> {
+  try {
+    const tema = await obtenerTema(userId, id);
     if (!tema) return false;
 
     const payload = JSON.stringify({
@@ -40,126 +159,24 @@ export async function sincronizarNube(id: string): Promise<boolean> {
       descripcion: tema.descripcion,
       contenido: tema.contenido,
       color: tema.color,
-      creadoEn: tema.creadoEn,
-      actualizadoEn: tema.actualizadoEn,
+      syncAt: Date.now(),
     });
 
     const encrypted = encriptarNota(payload);
 
-    const { error } = await supabase.from("notas").upsert(
-      {
-        id: tema.id,
-        titulo: tema.titulo,
-        data_encrypted: encrypted,
-        updated_at: new Date(tema.actualizadoEn).toISOString(),
-      },
-      { onConflict: "id" }
-    );
+    const { error } = await supabaseAdmin
+      .from("notas")
+      .update({ data_encrypted: encrypted })
+      .eq("id", id)
+      .eq("user_id", userId);
 
     if (error) {
-      console.error("SYNC_ERROR:", error.message);
+      console.error("SYNC_ERROR:", error);
       return false;
     }
 
-    // Marcar sync exitoso en localStorage
-    localStorage.setItem(`aegis_sync_${id}`, String(Date.now()));
     return true;
-  } catch (err) {
-    console.error("SYNC_EXCEPTION:", err);
-    return false;
-  }
-}
-
-// ── Descargar desde Supabase y descifrar ──
-export async function descargarDesdeNube(id: string): Promise<Tema | null> {
-  try {
-    const { data, error } = await supabase
-      .from("notas")
-      .select("data_encrypted")
-      .eq("id", id)
-      .single();
-
-    if (error || !data?.data_encrypted) return null;
-
-    const json = desencriptarNota(data.data_encrypted);
-    return JSON.parse(json) as Tema;
-  } catch {
-    return null;
-  }
-}
-
-// ── Descargar todos los temas desde Supabase ──
-export async function descargarTodosDesdeNube(): Promise<Tema[]> {
-  try {
-    const { data, error } = await supabase
-      .from("notas")
-      .select("data_encrypted")
-      .order("updated_at", { ascending: false });
-
-    if (error || !data) return [];
-
-    return data
-      .map((row) => {
-        try {
-          const json = desencriptarNota(row.data_encrypted);
-          return JSON.parse(json) as Tema;
-        } catch {
-          return null;
-        }
-      })
-      .filter((t): t is Tema => t !== null);
-  } catch {
-    return [];
-  }
-}
-
-// ── Eliminar de Supabase ──
-export async function eliminarDeNube(id: string): Promise<boolean> {
-  try {
-    const { error } = await supabase.from("notas").delete().eq("id", id);
-    return !error;
   } catch {
     return false;
   }
-}
-
-export function cargarTemas(): Tema[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
-}
-
-export function guardarTemas(temas: Tema[]): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(temas));
-}
-
-export function crearTema(titulo: string, descripcion: string): Tema {
-  return {
-    id: crypto.randomUUID(),
-    titulo,
-    descripcion,
-    contenido: "",
-    color: "cyan",
-    creadoEn: Date.now(),
-    actualizadoEn: Date.now(),
-  };
-}
-
-export function obtenerTema(id: string): Tema | undefined {
-  return cargarTemas().find((t) => t.id === id);
-}
-
-export function actualizarTema(id: string, cambios: Partial<Tema>): void {
-  const temas = cargarTemas().map((t) =>
-    t.id === id ? { ...t, ...cambios, actualizadoEn: Date.now() } : t
-  );
-  guardarTemas(temas);
-}
-
-export function eliminarTema(id: string): void {
-  guardarTemas(cargarTemas().filter((t) => t.id !== id));
 }
