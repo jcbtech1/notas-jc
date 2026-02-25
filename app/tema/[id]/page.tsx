@@ -66,6 +66,7 @@ export default function TemaDetalle() {
     const interval = setInterval(() => {
       if (!guardadoRef.current && tema) {
         localStorage.setItem(DRAFT_PREFIX + id, contenidoRef.current);
+        console.log("AUTOSAVE: Contenido a guardar:", contenidoRef.current.slice(0, 100));
         // Guardar en servidor
         fetch(`/api/tema/${id}`, {
           method: "PUT",

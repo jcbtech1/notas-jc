@@ -18,19 +18,25 @@ export default function LoginPage() {
     setError("");
     setLoading(true);
     try {
+      console.log("LOGIN_CLIENTE: Enviando credenciales");
       const res = await fetch("/api/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include", // ← IMPORTANTÍSIMO: permite guardar la cookie
         body: JSON.stringify({ username, password }),
       });
       const data = await res.json();
+      console.log("LOGIN_CLIENTE: Respuesta del servidor", { status: res.status, data });
       if (data.ok) {
+        console.log("LOGIN_CLIENTE: Login exitoso, redirigiendo a /");
         // Token guardado en cookie httpOnly automáticamente
-        router.push("/");
+        await router.push("/");
       } else {
+        console.error("LOGIN_CLIENTE: Error en respuesta", data.error);
         setError(data.error || "ACCESO_DENEGADO");
       }
-    } catch {
+    } catch (err) {
+      console.error("LOGIN_CLIENTE: Excepción", err);
       setError("ERROR_CONEXION: No se pudo contactar al servidor");
     } finally {
       setLoading(false);

@@ -14,8 +14,13 @@ export function signJWT(payload: JWTPayload): string {
 
 export function verifyJWT(token: string): JWTPayload | null {
   try {
-    return jwt.verify(token, JWT_SECRET) as JWTPayload;
-  } catch {
+    console.log("VERIFY_JWT: Verificando token con secret:", JWT_SECRET?.slice(0, 10) + "...");
+    const payload = jwt.verify(token, JWT_SECRET) as JWTPayload;
+    console.log("VERIFY_JWT: Token válido para usuario:", payload.username);
+    return payload;
+  } catch (err) {
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    console.error("VERIFY_JWT: Error verificando token:", errorMsg);
     return null;
   }
 }

@@ -43,3 +43,6 @@ export const config = {
     "/((?!_next/static|_next/image|favicon.ico|.*\\.png|.*\\.jpg).*)",
   ],
 };
+
+// Necesario para usar crypto (jsonwebtoken) en el middleware
+export const runtime = "nodejs";

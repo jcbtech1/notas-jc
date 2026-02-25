@@ -20,10 +20,18 @@ export async function POST(req: NextRequest) {
   }
 
   try {
+    console.log("REGISTER: Iniciando registro para", username);
+    
     // Hashear contraseña
     const passwordHash = await bcrypt.hash(password, 10);
+    console.log("REGISTER: Hash generado");
 
     // Crear usuario en BD
+    console.log("REGISTER: Insertando en Supabase...", {
+      url: process.env.NEXT_PUBLIC_SUPABASE_URL,
+      hasKey: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
+    });
+
     const { data: user, error } = await supabaseAdmin
       .from("users")
       .insert([
@@ -37,15 +45,26 @@ export async function POST(req: NextRequest) {
       .select("id, username, email")
       .single();
 
+    console.log("REGISTER: Respuesta de Supabase", { user, error });
+
     if (error) {
+      console.error("REGISTER: Error de Supabase", error);
       if (error.code === "23505") {
         return NextResponse.json(
           { ok: false, error: "USUARIO_EXISTE: El username ya está registrado" },
           { status: 409 }
         );
       }
-      throw error;
+      return NextResponse.json(
+        {
+          ok: false,
+          error: `ERROR_BD: ${error.message || JSON.stringify(error)}`,
+        },
+        { status: 500 }
+      );
     }
+
+    console.log("REGISTER: Usuario creado exitosamente", user.id);
 
     return NextResponse.json(
       {
@@ -56,9 +75,10 @@ export async function POST(req: NextRequest) {
       { status: 201 }
     );
   } catch (err) {
-    console.error("REGISTER_ERROR:", err);
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    console.error("REGISTER_EXCEPTION:", errorMsg, err);
     return NextResponse.json(
-      { ok: false, error: "ERROR_SERVIDOR" },
+      { ok: false, error: `ERROR_SERVIDOR: ${errorMsg}` },
       { status: 500 }
     );
   }
