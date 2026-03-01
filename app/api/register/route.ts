@@ -20,17 +20,8 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    console.log("REGISTER: Iniciando registro para", username);
-    
-    // Hashear contraseña
+    // Hashear contraseña y crear usuario
     const passwordHash = await bcrypt.hash(password, 10);
-    console.log("REGISTER: Hash generado");
-
-    // Crear usuario en BD
-    console.log("REGISTER: Insertando en Supabase...", {
-      url: process.env.NEXT_PUBLIC_SUPABASE_URL,
-      hasKey: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
-    });
 
     const { data: user, error } = await supabaseAdmin
       .from("users")
@@ -45,10 +36,13 @@ export async function POST(req: NextRequest) {
       .select("id, username, email")
       .single();
 
-    console.log("REGISTER: Respuesta de Supabase", { user, error });
-
     if (error) {
-      console.error("REGISTER: Error de Supabase", error);
+      if (error.code === "23505") {
+        return NextResponse.json(
+          { ok: false, error: "USUARIO_EXISTE: El username ya está registrado" },
+          { status: 409 }
+        );
+      }
       if (error.code === "23505") {
         return NextResponse.json(
           { ok: false, error: "USUARIO_EXISTE: El username ya está registrado" },
@@ -63,9 +57,6 @@ export async function POST(req: NextRequest) {
         { status: 500 }
       );
     }
-
-    console.log("REGISTER: Usuario creado exitosamente", user.id);
-
     return NextResponse.json(
       {
         ok: true,

@@ -14,8 +14,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    console.log("LOGIN: Buscando usuario", username);
-    
+    // buscar usuario en BD
     // Buscar usuario en BD
     const { data: user, error } = await supabaseAdmin
       .from("users")
@@ -23,10 +22,7 @@ export async function POST(req: NextRequest) {
       .eq("username", username)
       .single();
 
-    console.log("LOGIN: Respuesta Supabase", { user, error });
-
     if (error || !user) {
-      console.error("LOGIN: Usuario no encontrado o error", error?.message);
       return NextResponse.json(
         { ok: false, error: "ACCESO_DENEGADO: Credenciales inválidas" },
         { status: 401 }
@@ -42,18 +38,14 @@ export async function POST(req: NextRequest) {
     }
 
     // Comparar contraseña con bcrypt
-    console.log("LOGIN: Comparando contraseña");
     const passwordMatch = await bcrypt.compare(password, user.password_hash);
     if (!passwordMatch) {
-      console.error("LOGIN: Contraseña incorrecta para", username);
       return NextResponse.json(
         { ok: false, error: "ACCESO_DENEGADO: Credenciales inválidas" },
         { status: 401 }
       );
     }
-
-    console.log("LOGIN: Contraseña correcta, generando JWT para", username);
-    
+    // contraseña correcta: generar JWT
     // Generar JWT
     const token = signJWT({
       userId: user.id,

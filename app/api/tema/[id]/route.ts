@@ -19,7 +19,6 @@ export async function GET(
     return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
   }
 
-  console.log("GET_TEMA: Contenido recuperado:", tema.contenido?.slice(0, 100));
   return NextResponse.json({ tema });
 }
 
@@ -35,9 +34,6 @@ export async function PUT(
 
   const { id } = await params;
   const cambios = await req.json();
-  
-  console.log("PUT_TEMA: Contenido recibido:", cambios.contenido?.slice(0, 100));
-
   const ok = await actualizarTema(payload.userId, id, cambios);
   if (!ok) {
     return NextResponse.json({ error: "ERROR_UPDATE" }, { status: 500 });
